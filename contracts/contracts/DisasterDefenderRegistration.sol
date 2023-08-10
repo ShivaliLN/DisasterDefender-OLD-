@@ -1,92 +1,76 @@
-//SPDX-License-Identifier: Unlicense
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@chainlink/contracts/src/v0.8/ChainlinkClient.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
+contract DisasterDefenderRegistration {
 
-contract DisasterDefenderData is KeeperCompatibleInterface, ChainlinkClient {
-    
-    using Chainlink for Chainlink.Request;
-    address owner;
-    address private oracle;
-    bytes32 private jobId;
-    uint256 private fee;
-    uint256 public ethPrice;  // Store Ethereum's price in USD
-    bool public fetchDataFlag = false;  // Manual trigger flag
-    uint256 public lastFetchTime = 0;   // Store the timestamp of the last fetch
-    uint public upKeepcounter;
+    enum UserType { Volunteer, AidRecipient }
 
-    struct DisasterInfo {
+    struct Volunteer {
         string name;
-        string typeOfDisaster;
-        string severity;
+        string email;
+        string specialty;
+        string region;
+    }
+
+    struct AidRecipient {
+        string name;
+        string email;
         string location;
-        uint256 timestamp;  // Unix timestamp
+        string aidType;
+        uint256 numPeople;
+        string contactNum;
     }
 
-    DisasterInfo[] public disasters;
+    // Arrays to store all volunteers and aid recipients
+    Volunteer[] public volunteers;
+    AidRecipient[] public aidRecipients;
 
-    constructor() {
-        owner = msg.sender; 
-        setPublicChainlinkToken();
+    // Mapping of region to volunteer and aid recipient indices
+    mapping(string => uint256[]) public volunteerIndicesByRegion;
+    mapping(string => uint256[]) public aidRecipientIndicesByRegion;
+
+    function registerVolunteer(
+        string memory _name,
+        string memory _email,
+        string memory _specialty,
+        string memory _region
+    ) public {
+        volunteers.push(Volunteer(_name, _email, _specialty, _region));
+        volunteerIndicesByRegion[_region].push(volunteers.length - 1);
+    }
+
+    function registerAidRecipient(
+        string memory _name,
+        string memory _email,
+        string memory _location,
+        string memory _aidType,
+        uint256 _numPeople,       
+        string memory _contactNum        
+    ) public {
+        aidRecipients.push(AidRecipient(_name, _email, _location, _aidType, _numPeople, _contactNum));
+        aidRecipientIndicesByRegion[_location].push(aidRecipients.length - 1);
+    }
+
+    // Functions to retrieve volunteers and aid recipients based on region
+    function getVolunteersByRegion(string memory _region) public view returns (Volunteer[] memory) {
+        uint256[] memory indices = volunteerIndicesByRegion[_region];
+        Volunteer[] memory regionVolunteers = new Volunteer[](indices.length);
         
-        // Using Goerli Testnet Oracle for this PoC
-        oracle = 0xCC79157eb46F5624204f47AB42b3906cAA40eaB7;
-        jobId = "ca98366cc7314957b8c012c72f05aeeb";  // Assuming GET>uint256 job
-        fee = 0.1 * 10 ** 18; 
-    }
-    
-    function checkUpkeep(bytes calldata checkData) external view override returns (bool upkeepNeeded, bytes memory performData) {
-        bool timeCondition = (block.timestamp - lastFetchTime) > 1 days;
-        upkeepNeeded = fetchDataFlag || timeCondition;
-        performData = checkData;        
-    }
-
-    function performUpkeep(bytes calldata) external override {
-        requestData();
-        upKeepcounter++;
-        lastFetchTime = block.timestamp;
-        fetchDataFlag = false;  // Reset the flag after fetching the data
-    } 
-
-    function requestData() public returns (bytes32 requestId) {
-        Chainlink.Request memory request = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
+        for (uint256 i = 0; i < indices.length; i++) {
+            regionVolunteers[i] = volunteers[indices[i]];
+        }
         
-        // Using CoinGecko API to get Ethereum's current price in USD
-        request.add("get", "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
-        request.add("path", "ethereum.usd");
-
-        return sendChainlinkRequestTo(oracle, request, fee);                      
+        return regionVolunteers;
     }
-    
-    function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
-        ethPrice = _price;
+
+    function getAidRecipientsByRegion(string memory _region) public view returns (AidRecipient[] memory) {
+        uint256[] memory indices = aidRecipientIndicesByRegion[_region];
+        AidRecipient[] memory regionAidRecipients = new AidRecipient[](indices.length);
         
-        // Adding mock disaster data that matches the UI's dummy data
-        disasters.push(DisasterInfo({
-            name: "Hurricane Zeta",
-            typeOfDisaster: "Hurricane",
-            severity: "High",
-            location: "East Coast",
-            timestamp: block.timestamp
-        }));
-    }
-
-    // Manually trigger the data fetch
-    function manualTrigger() external {
-        require(msg.sender == owner, "Only the owner can manually trigger data fetch.");
-        fetchDataFlag = true;
-    }
-
-    // Manually stop trigger
-    function manualTriggerStop() external {
-        require(msg.sender == owner, "Only the owner can manually trigger data fetch.");
-        fetchDataFlag = false;
-    }
-
-    // Get the latest disaster
-    function getLatestDisaster() public view returns (DisasterInfo memory) {
-        require(disasters.length > 0, "No disasters recorded yet.");
-        return disasters[disasters.length - 1];
+        for (uint256 i = 0; i < indices.length; i++) {
+            regionAidRecipients[i] = aidRecipients[indices[i]];
+        }
+        
+        return regionAidRecipients;
     }
 }

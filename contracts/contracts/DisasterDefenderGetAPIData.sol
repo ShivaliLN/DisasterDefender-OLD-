@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@chainlink/contracts/src/v0.8/ChainlinkClient.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
 
-contract DisasterDefenderData is KeeperCompatibleInterface, ChainlinkClient {
+contract DisasterDefenderGetAPIData is KeeperCompatibleInterface, ChainlinkClient {
     
     using Chainlink for Chainlink.Request;
     address owner;
@@ -14,8 +14,17 @@ contract DisasterDefenderData is KeeperCompatibleInterface, ChainlinkClient {
     uint256 public ethPrice;  // Store Ethereum's price in USD
     bool public fetchDataFlag = false;  // Manual trigger flag
     uint256 public lastFetchTime = 0;   // Store the timestamp of the last fetch
-    
     uint public upKeepcounter;
+
+    struct DisasterInfo {
+        string name;
+        string typeOfDisaster;
+        string severity;
+        string location;
+        uint256 timestamp;  // Unix timestamp
+    }
+
+    DisasterInfo[] public disasters;
 
     constructor() {
         owner = msg.sender; 
@@ -52,11 +61,32 @@ contract DisasterDefenderData is KeeperCompatibleInterface, ChainlinkClient {
     
     function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         ethPrice = _price;
+        
+        // Adding mock disaster data that matches the UI's dummy data
+        disasters.push(DisasterInfo({
+            name: "Hurricane Zeta",
+            typeOfDisaster: "Hurricane",
+            severity: "High",
+            location: "East Coast",
+            timestamp: block.timestamp
+        }));
     }
 
     // Manually trigger the data fetch
     function manualTrigger() external {
         require(msg.sender == owner, "Only the owner can manually trigger data fetch.");
         fetchDataFlag = true;
+    }
+
+    // Manually stop trigger
+    function manualTriggerStop() external {
+        require(msg.sender == owner, "Only the owner can manually trigger data fetch.");
+        fetchDataFlag = false;
+    }
+
+    // Get the latest disaster
+    function getLatestDisaster() public view returns (DisasterInfo memory) {
+        require(disasters.length > 0, "No disasters recorded yet.");
+        return disasters[disasters.length - 1];
     }
 }
